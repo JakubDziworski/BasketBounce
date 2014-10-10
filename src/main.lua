@@ -37,7 +37,7 @@ local function main()
     cc.Director:getInstance():setContentScaleFactor(5)
     
     --create scene 
-    local scene = require("GameScene")
+    local scene = require("GameLogic")
     local gameScene = scene.create()
     if cc.Director:getInstance():getRunningScene() then
         cc.Director:getInstance():replaceScene(gameScene)
