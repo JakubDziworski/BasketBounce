@@ -21,7 +21,6 @@ local function main()
     -- avoid memory leak
     collectgarbage("setpause", 100)
     collectgarbage("setstepmul", 5000)
-
     -- initialize director
     local director = cc.Director:getInstance()
 
@@ -33,12 +32,13 @@ local function main()
     
     cc.FileUtils:getInstance():addSearchPath("src")
     cc.FileUtils:getInstance():addSearchPath("res")
-    cc.Director:getInstance():getOpenGLView():setDesignResolutionSize(480, 320, 0)
-    cc.Director:getInstance():setContentScaleFactor(5)
-    
+    cc.Director:getInstance():getOpenGLView():setDesignResolutionSize(480, 320, cc.ResolutionPolicy.NO_BORDER)
+    cc.Director:getInstance():setContentScaleFactor(5) 
     --create scene 
+    require "MainMenu"
     require "GameLogic"
-    local gameScene = GameLogic.create(1)
+    
+    local gameScene = MainMenu.create()--GameLogic.create(1)
     if cc.Director:getInstance():getRunningScene() then
         cc.Director:getInstance():replaceScene(gameScene)
     else

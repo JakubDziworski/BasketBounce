@@ -3,25 +3,31 @@ require "Cocos2dConstants"
 require "VR"
 require "Level"
 require "Hud"
-
-GameLogic = class("GameLogic",function()
+require "Effects"
+require "Utils"
+ 
+GameLogic = class("GameLogic",function() 
+    GameLogic.__index = GameLogic 
+    GameLogic.shorStarted = false
+    GameLogic.shotReleased = false
+    GameLogic.timeHeld = 0
+    GameLogic.maxTimeHeld = 3.0
+    GameLogic.level = nil
+    GameLogic.hud = nil
+    GameLogic.removedObstacles = {}
+    GameLogic.alreadyHitOstDict = {}
+    GameLogic.currLevel = nil
     return cc.Scene:createWithPhysics()
 end)
-GameLogic.__index = GameLogic
-GameLogic.shorStarted = false
-GameLogic.shotReleased = false
-GameLogic.timeHeld = 0
-GameLogic.maxTimeHeld = 3.0
-GameLogic.level = nil
-GameLogic.hud = nil
-GameLogic.removedObstacles = {}
-GameLogic.currLevel = nil
 
 
 function GameLogic:checkIfResetBall(dt) 
     if self.level:getCurrBall() == nil then
        return   
     end 
+    for k,v in pairs(self.alreadyHitOstDict) do
+        self.alreadyHitOstDict[k] = v + dt
+    end
     if self.shorStarted then 
         self.timeHeld  = self.timeHeld+4*dt
         self.level:getArrow():setPercentage(100*self.timeHeld/3.0)
@@ -30,8 +36,8 @@ function GameLogic:checkIfResetBall(dt)
         self.timeHeld = 0
     end
     if (self.level:getCurrBall():getPositionX() > VisibleRect:right().x  or self.level:getCurrBall():getPositionX() < VisibleRect:left().x ) then
-        self.level:createNewBall()
-        self.shotReleased = false
+        self:resetScene()
+        self.shotReleased = false 
     end 
 end
 function GameLogic.create(levelNumber)
@@ -39,11 +45,12 @@ function GameLogic.create(levelNumber)
     scene.currLevel = levelNumber
     scene.level = Level.create(levelNumber)
     scene.hud = Hud.create()
+    scene.hud:setRestartEndBtnListneer(function () cc.Director:getInstance():replaceScene(GameLogic.create(levelNumber)) end)
     scene:createHudHandlers()
     scene:getPhysicsWorld():setDebugDrawMask(cc.PhysicsWorld.DEBUGDRAW_ALL)
     scene:getPhysicsWorld():setGravity(cc.p(0,-300))
-    scene:addChild(scene.level)
-    scene:addChild(scene.hud)
+    scene:addChild(scene.level,1)
+    scene:addChild(scene.hud,2)
     scene:init()
     return scene
 end
@@ -51,15 +58,19 @@ function GameLogic:onWonLevel()
     local function goToNextLevel()
         cc.Director:getInstance():replaceScene(GameLogic.create(self.currLevel+1))
     end
-    self.hud:levelCompleted()
+    self.level:unregisterScriptHandler()
+    self.level:unscheduleUpdate()
+    self.hud:levelCompleted(self.level:getScore(),self.level:getMaxScore())
     self.hud:setNextLevelBtnListener(goToNextLevel)
 end
 function GameLogic:resetScene()
     for k,v in pairs(self.removedObstacles) do
-        print(k,v)
         table.insert(self.level:getObstacles(),v)
         v:getNode():setColor(cc.c3b(255,255,255))
     end
+    self.alreadyHitOstDict = {}
+    self.level:resetScore()
+    self.hud:setScoreText(0,self.level:getMaxScore())
     self.level:createNewBall()
     self.removedObstacles = {}
 end
@@ -72,23 +83,32 @@ function GameLogic:createHudHandlers()
     self.hud:setRetryBtnListener(HUDBackbuttonHandler)
 end
 function GameLogic:init()
+    --WYKRYWANIE KOLIZJI--
     local function onCollided(contact)
-         --print("contact started")
          local bodyB = contact:getShapeB():getBody();
          if(bodyB:isDynamic()) then return end
          bodyB:getNode():setColor(cc.c3b(0,255,0))
-         for k,v in pairs(self.level:getObstacles()) do
-            if v == bodyB then 
-                table.remove(self.level:getObstacles(),k)
-                table.insert(self.removedObstacles,v)
-                self.hud:setHudText(self.level:addPointsToScoreAndGetScore(100))
-                if table.getn(self.level:getObstacles()) == 0 then self:onWonLevel() end
+         if self.alreadyHitOstDict[bodyB] == nil then 
+            self.alreadyHitOstDict[bodyB] = 0.01 
+            self.hud:setScoreText(self.level:addPointsToScoreAndGetScore(100),self.level:getMaxScore())
+            Effects:plusPoints(self.level,cc.p(bodyB:getPosition().x,bodyB:getPosition().y+25),100)
+            for k,v in pairs(self.level:getObstacles()) do
+                if v == bodyB then 
+                 table.remove(self.level:getObstacles(),k)
+                 table.insert(self.removedObstacles,v)
+                 if table.getn(self.level:getObstacles()) == 0 then self:onWonLevel() end
+                end
             end
-            --else print("did not found body to rmv") end
+         else
+         if(Utils:tableContains(self.removedObstacles,bodyB) and self.alreadyHitOstDict[bodyB] < 0.7) then return end
+         self.alreadyHitOstDict[bodyB] = 0.01
+         self.hud:setScoreText(self.level:addPointsToScoreAndGetScore(-50),self.level:getMaxScore())
+         Effects:plusPoints(self.level,cc.p(bodyB:getPosition().x,bodyB:getPosition().y+25),-50)
          end
     end
     local collisionListener = cc.EventListenerPhysicsContact:create()
     collisionListener:registerScriptHandler(onCollided, cc.Handler.EVENT_PHYSICS_CONTACT_POSTSOLVE)
+    --DOTKNIECIE RUSZONE--
     local function onTouchMoved(touch, event)
         local location = touch:getLocation()
         local vector = cc.p(self.level:getArrow():getPositionX()-location.x,location.y-self.level:getArrow():getPositionY())
@@ -96,12 +116,14 @@ function GameLogic:init()
         if(angle < 0) then angle = angle + 360 end
         self.level:getArrow():setRotation(-angle)
     end
+    --DOTKNIECIE ROZPOCZETE--
     local function onTouchBegan(touch, event)
         if self.shotReleased == true then return end
         self.shorStarted = true
         onTouchMoved(touch,event)
         return true;
     end  
+    --DOTKNIECIE ZAKONCZONE--
     local function onTouchEnded(touch, event)
         if self.shotReleased == true then return end
         local location = touch:getLocation()

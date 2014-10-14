@@ -8,17 +8,9 @@ VisibleRect.__index = VisibleRect
 VisibleRect.s_visibleRect = cc.rect(0,0,0,0)
 
 function VisibleRect:lazyInit()
-    if (self.s_visibleRect.width == 0.0 and self.s_visibleRect.height == 0.0) then
-        --[[
-        local pEGLView = cc.EGLView:getInstance()
-        local origin   = pEGLView:getVisibleOrigin()
-        ]]--
-        self.s_visibleRect.x = 0
-        self.s_visibleRect.y = 0
-        local size  = cc.Director:getInstance():getWinSize()
-        self.s_visibleRect.width  = size.width
-        self.s_visibleRect.height = size.height
-    end
+    local origin = cc.Director:getInstance():getVisibleOrigin()
+    local size = cc.Director:getInstance():getVisibleSize()
+    self.s_visibleRect = cc.rect(origin.x,origin.y,size.width,size.height)
 end
 
 function VisibleRect:getVisibleRect()
@@ -69,4 +61,12 @@ end
 function VisibleRect:rightBottom()
     self:lazyInit()
     return cc.p(self.s_visibleRect.x+self.s_visibleRect.width, self.s_visibleRect.y)
+end
+function VisibleRect:height()
+    self:lazyInit()
+    return VisibleRect:top().y - VisibleRect:bottom().y
+end
+function VisibleRect:width()
+    self:lazyInit()
+    return VisibleRect:right().x - VisibleRect:left().x
 end
